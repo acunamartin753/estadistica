@@ -3,7 +3,7 @@ fh_i <- function(x, i, h){
   suma <- 0
   for(j in 1:n.x){
     if (j!=i){
-      suma <- suma + dnorm((x[i]-x[j])/n.x)
+      suma <- suma + dnorm((x[i]-x[j])/h)
     }
   }
   return((1/((n.x-1)*h)) * suma)
