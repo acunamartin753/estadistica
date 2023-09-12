@@ -68,14 +68,14 @@ grilla.h <- seq(0.1,1,0.01)
 
 df <- bw.loocv(x,grilla.h)
 
-plot(grilla.h, df$loglikes)
+plot(grilla.h, df$loglikes, type = "l")
 
 abline(v = df$h.opt, col = "blue")
 abline(v = bw.nrd0(x), col = "red")
 abline(v = bw.SJ(x), col = "green")
 abline(v = bw.ucv(x), col = "purple")
+legend("topright", legend=c("h.CV", "Silverman","Sheather & Jones","VC insesgada R"), fill=c("blue", "red","green","purple"), col=c("blue", "red","green","purple"), border=c("blue", "red","green","purple"))
+
+?legend
 
 plot(density(x))
-
-
-
