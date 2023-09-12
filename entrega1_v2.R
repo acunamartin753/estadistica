@@ -74,8 +74,25 @@ abline(v = df$h.opt, col = "blue")
 abline(v = bw.nrd0(x), col = "red")
 abline(v = bw.SJ(x), col = "green")
 abline(v = bw.ucv(x), col = "purple")
-legend("topright", legend=c("h.CV", "Silverman","Sheather & Jones","VC insesgada R"), fill=c("blue", "red","green","purple"), col=c("blue", "red","green","purple"), border=c("blue", "red","green","purple"))
+legend("topright", legend=c("h.CV", "Silverman","Sheather & Jones","VC insesgada R"), fill=c("blue", "red","green","purple"), col=c("blue", "red","green","purple"), border="black")
 
-?legend
 
 plot(density(x))
+
+xf <- function(f,x,h){
+  n.x <- length(x)
+  x2 <- rep(0,n.x)
+  for(i in 1:n.x){
+    x2[i] <- f(x,i,h)
+  }
+  return(x2)
+}
+
+plot(density(x))
+lines(density(x,bw=as.numeric(df$h.opt)))
+lines(density(x,bw=bw.nrd0))
+lines(density(x,bw=bw.SJ(x)))
+lines(density(x,bw=bw.ucv(x)))
+
+
+     
