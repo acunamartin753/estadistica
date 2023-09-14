@@ -14,7 +14,6 @@ h.CV <- function(x,grilla.h){
   n.h <- length(grilla.h)
   maxi <- -9999
   hmax <- NA
-  jhmax <- NA
   for(j in 1:n.h) {
     h <- grilla.h[j]
     suma <- 0
@@ -25,10 +24,9 @@ h.CV <- function(x,grilla.h){
     if(suma>maxi){
       maxi <- suma
       hmax <- h
-      jhmax <- j
     }
   }
-  return(list(hmax, jhmax))
+  return(hmax)
 }
 
 bw.loocv <- function(x, grilla.h=NA) {
@@ -49,7 +47,7 @@ bw.loocv <- function(x, grilla.h=NA) {
   
   hmax <- h.CV(x, grilla.h)
   
-  return(list(h.opt=hmax[1], h.ret = hmax[2], loglikes=loglikes))
+  return(list(h.opt=hmax, h.ret = grilla.h, loglikes=loglikes))
 }
 
 muestra <- function(seed, n=200) {
