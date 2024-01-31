@@ -1,0 +1,631 @@
+---
+title: "Trabajo Práctico Final"
+output:
+  html_document: default
+editor_options:
+  markdown:
+    wrap: 72
+---
+
+# Regresión No Paramétrica y Métodos de Regularización en Modelo Lineal
+
+Facundo Alvarez Motta 889/21
+
+Ignacio Rodriguez Sañudo 956/21
+
+Martin Acuña 596/21
+
+## Ejercicio (a)
+
+```{r}
+set.seed(-1)
+```
+
+```{r message=FALSE, warning=FALSE}
+library(glmnet)
+library(readxl)
+library(ggplot2)
+library(tidyverse)
+```
+
+```{r message=FALSE, warning=FALSE}
+body <- read_excel("body.xls", col_names=FALSE)
+nombres_col <- c("BIAC","BIIL","BITRO","CHEST1","CHEST2","ELBOW","WRIST",
+"KNEE","ANKLE","SHOUL","CHESTG","WAISTG","NAVEL","HIP","GLUTE","BICEP",
+"FLOREA","KNEEG","CALF","ANKLEG","WRISTG","AGE","WEIG","HEIG","GEN")
+
+colnames(body)<- (nombres_col)
+body
+```
+
+```{r}
+#Buscamos si hay nulos o Nan
+any(is.na(body))
+for (nom in nombres_col) {
+  print(any(is.nan(body[[nom]])))
+}
+```
+
+Importamos los datos, colocamos los nombres en las correspondientes
+columnas y además verificamos que no haya valores NA ni NaN en ninguna
+columna.
+
+# Etapa exploratoria
+
+## Ejercicio (b)
+
+Primero calculamos la mediana muestral del peso de mujeres y hombres por
+separado.
+
+```{r}
+#Mediana de los hombres
+mediana_h <- median(body$WEIG[body$GEN == 1])
+print(paste("Mediana de los hombres:", mediana_h))
+
+#Mediana de los mujeres
+mediana_m <- median(body$WEIG[body$GEN == 0])
+print(paste("Mediana de las mujeres:", mediana_m))
+```
+
+### Método 1: aproximación por distribución normal
+
+Como método inicial para calcular el intervalo de confianza del 95%,
+utilizaremos el método de bootstrap no paramétrico. En este enfoque,
+tomaremos 5000 muestras con reposición de los datos proporcionados y
+luego, mediante el Teorema del Límite Central (TCL), es relativamente
+fácil encontrar el intervalo de confianza aproximado.
+
+```{r}
+#Calculamos el intevalo de confianza para hombre con metodo 1
+B <- 5000
+peso_h <- body$WEIG[body$GEN == 1]
+n <- length(peso_h)
+estmed_h <- 0
+for(i in 1:B){
+  xboot <- sample(peso_h, n, replace = TRUE )
+  estmed_h[i] <- median(xboot)
+}
+se_boot_h <- sd(estmed_h)
+quantil_alpha_sobre2 <- qnorm(1-0.025, 0, 1)
+
+intervalo_conf_h <- c(mediana_h - quantil_alpha_sobre2*se_boot_h, mediana_h + quantil_alpha_sobre2*se_boot_h)
+print("Intervalo aproximado hombres")
+print(intervalo_conf_h)
+print(paste("Longitud del intervalo:", intervalo_conf_h[2] - intervalo_conf_h[1]))
+```
+
+```{r}
+#Calculamos el intevalo de confianza para mujeres con metodo 1
+B <- 5000
+peso_m <- body$WEIG[body$GEN == 0]
+n <- length(peso_m)
+estmed_m <- 0
+for(i in 1:B){
+  xboot <- sample(peso_m, n, replace = TRUE )
+  estmed_m[i] <- median(xboot)
+}
+se_boot_m <- sd(estmed_m)
+quantil_alpha_sobre2 <- qnorm(1-0.025, 0, 1)
+
+intervalo_conf_m <- c(mediana_m - quantil_alpha_sobre2*se_boot_m, mediana_m + quantil_alpha_sobre2*se_boot_m)
+print("Intervalo aproximado mujeres")
+print(intervalo_conf_m)
+print(paste("Longitud del intervalo:", intervalo_conf_m[2] - intervalo_conf_m[1]))
+```
+
+### Método 2: cuantiles muestrales
+
+En este segundo escenario, aplicaremos el mismo método que en el enfoque
+anterior para generar 5000 muestras. Sin embargo, en este caso, nos
+enfocaremos exclusivamente en obtener el intervalo de confianza
+basándonos en las 5000 medianas. Identificaremos los valores que
+delimitan un intervalo del 95%, es decir, buscaremos los cuantiles 2,5%
+y 97,5% para establecer los límites del intervalo de confianza.
+
+```{r}
+#Calculamos el intevalo de confianza para hombre con metodo 2
+B <- 5000
+peso_h <- body$WEIG[body$GEN == 1]
+n <- length(peso_h)
+estmed_h <- 0
+for(i in 1:B){
+  xboot <- sample(peso_h, n, replace = TRUE)
+  estmed_h[i] <- median(xboot)
+}
+
+intervalo_conf_h <- c(quantile(estmed_h, 0.025), quantile(estmed_h, 1-0.025))
+print("Intervalo aproximado hombres")
+cat(intervalo_conf_h[1], intervalo_conf_h[2], "\n")
+cat("Longitud del intervalo:", intervalo_conf_h[2] - intervalo_conf_h[1])
+```
+
+```{r}
+#Calculamos el intevalo de confianza para mujeres con metodo 2
+B <- 5000
+peso_m <- body$WEIG[body$GEN == 0]
+n <- length(peso_m)
+estmed_m <- 0
+for(i in 1:B){
+  xboot <- sample(peso_m, n, replace = TRUE )
+  estmed_m[i] <- median(xboot)
+}
+
+intervalo_conf_m <- c(quantile(estmed_m, 0.025), quantile(estmed_m, 1-0.025))
+print("Intervalo aproximado mujeres")
+cat(intervalo_conf_m[1], intervalo_conf_m[2], "\n")
+cat("Longitud del intervalo:", intervalo_conf_m[2] - intervalo_conf_m[1])
+```
+
+En conclusión, al analizar los resultados obtenidos mediante dos métodos
+distintos para calcular intervalos de confianza del 95%, se observa que
+los intervalos son comparables entre ambos géneros, aunque aquellos
+derivados del método 1 exhiben una mayor longitud.
+
+Es interesante destacar que la mediana del grupo femenino resultó ser
+menor que la del grupo masculino, lo cual podría sugerir diferencias en
+la distribución del peso entre ambos géneros. Además, se observa que los
+intervalos de confianza para los hombres tienen una mayor amplitud,
+indicando posiblemente una variabilidad más pronunciada en el peso de
+los hombres.
+
+Aunque la cantidad de hombres y mujeres en la muestra es similar, la
+mayor longitud de los intervalos masculinos podría deberse a factores
+adicionales que generan una mayor dispersión en los datos de peso de los
+hombres.Estos resultados nos muestran de manera detallada cómo varía y
+cuáles son las tendencias en la distribución de peso entre hombres y
+mujeres en la muestra que estudiamos.
+
+## Ejercicio (c)
+
+Realizamos el grafico que tiene al peso en función de la altura, en
+donde ademas diferenciamos por género.
+
+```{r}
+genero <- factor(body$GEN, levels=c(0,1), labels = c("Mujer", "Hombre"))
+
+ggplot(body, aes(x = HEIG, y = WEIG, color = genero)) +
+  geom_point() +
+  labs(title = "Gráfico de dispersión del peso en funcion de la altura",
+       x = "Altura",
+       y = "Peso",
+       color = "Genero") +
+  theme_minimal()
+```
+
+Observamos una correlación positiva entre las variables, a medida que
+aumenta la altura, suele aumentar el peso.
+
+```{r}
+cor(body$HEIG, body$WEIG)
+```
+
+Esto se corrobora a la hora de ver el coeficiente de correlación entre
+HEIG y WIEG, en donde vemos que tienen una correlacion superior al 70%.
+
+## Ejercicio (d)
+
+Añadimos las regresiones (ksmooth) hechas a los gráficos y comparamos
+entre hombres y mujeres.
+
+```{r}
+regresion_h <- ksmooth(body$HEIG[body$GEN == 1], body$WEIG[body$GEN == 1], kernel = "normal", bandwidth = 10)
+regresion_m <- ksmooth(body$HEIG[body$GEN == 0], body$WEIG[body$GEN == 0], kernel = "normal", bandwidth = 10)
+
+
+regression_df_h <- data.frame(x = regresion_h$x, y = regresion_h$y)
+regression_df_m <- data.frame(x = regresion_m$x, y = regresion_m$y)
+
+ggplot(body, aes(x = HEIG, y = WEIG, color = genero)) +
+  geom_point() +
+  geom_line(data = regression_df_h, aes(x = x, y = y), linetype = "solid", color = "blue", linewidth = 1) +
+  geom_line(data = regression_df_m, aes(x = x, y = y), linetype = "solid", color = "red", linewidth = 1) +
+  labs(title = "Gráfico de dispersión del peso en funcion de la altura",
+       x = "Altura",
+       y = "Peso",
+       color = "Genero") +
+  theme_minimal()
+```
+
+Las funciones obtenidas son cercanas a rectas. Creemos que una función
+lineal puede aproximar bien los datos, considerando la variabilidad del
+peso para una altura específica. Además, según lo que podemos observar,
+la posible "pendiente" en una recta para los hombres parece ser mayor
+que la de las mujeres.
+
+## Ejercicio (e)
+
+Para cada género, probaremos con todas las ventanas desde h = 5 hasta h
+= 20, con saltos de 0.5. En cada ventana, usando convalidación cruzada
+dejando uno afuera, calcularemos el error cuadrático medio de
+convalidación cruzada y seleccionaremos la ventana que minimice este
+error.
+
+```{r}
+#Buscamos la mejor ventana para hombres
+n <- length(body$HEIG[body$GEN == 1])
+windows <- seq(5, 20, 0.5)
+df_part <- data.frame(HEIG = body$HEIG[body$GEN == 1], WEIG = body$WEIG[body$GEN == 1])
+errores_w <- c()
+
+for (w in windows){
+  tot <- 0
+  for (i in 1:n){
+    modelo_ajustado <- ksmooth(df_part$HEIG[-i], df_part$WEIG[-i], kernel = "normal", bandwidth = w, x.points = df_part$HEIG[i])
+
+    tot <- tot + (df_part$WEIG[i] - modelo_ajustado$y[1])^2
+  }
+  errores_w <- c(errores_w , tot/n)
+}
+
+print(paste("La ventana optima es de h =", windows[which.min(errores_w)]))
+print(paste("El ECM es de", min(errores_w)))
+
+plot(windows, errores_w, main = "Busqueda de mejor ventana segun error cuadratico en hombres", xlab= "Tamaño ventana", ylab = "Error Cuadratico") +
+  points(windows[which.min(errores_w)], min(errores_w), col = "red", pch = 19)
+```
+
+```{r}
+#Buscamos la mejor ventana para mujeres
+n <- length(body$HEIG[body$GEN == 0])
+windows <- seq(5, 20, 0.5)
+df_part <- data.frame(HEIG = body$HEIG[body$GEN == 0], WEIG = body$WEIG[body$GEN == 0])
+errores_w <- c()
+
+for (w in windows){
+  tot <- 0
+  for (i in 1:n){
+    modelo_ajustado <- ksmooth(df_part$HEIG[-i], df_part$WEIG[-i], kernel = "normal", bandwidth = w, x.points = df_part$HEIG[i])
+
+    tot <- tot + (df_part$WEIG[i] - modelo_ajustado$y[1])^2
+  }
+  errores_w <- c(errores_w , tot/n)
+}
+print(paste("La ventana optima es de h =", windows[which.min(errores_w)]))
+print(paste("El ECM es de", min(errores_w)))
+
+plot(windows, errores_w, main = "Busqueda de mejor ventana segun error cuadratico en mujeres", xlab= "Tamaño ventana", ylab = "Error Cuadratico") +
+  points(windows[which.min(errores_w)], min(errores_w), col = "red", pch = 19)
+```
+
+Para ambos géneros, la ventana óptima es de h = 8. Vemos en los 2
+graficos como para todos los otros puntos el ECM es mayor y además
+podemos intuir que luego de h = 8, a medida que aumenta la ventana,
+aumenta el ECM.
+
+## Ejercicio (f)
+
+Comparamos el modelo no parametrico con el modelo lineal de cuadrados
+minimos.
+
+```{r}
+#Diagrama de dispersion de HEIG vs. WEIG hombres
+regresion_h <- ksmooth(body$HEIG[body$GEN == 1], body$WEIG[body$GEN == 1], kernel = "normal", bandwidth = 8)
+df_filter <- body[body$GEN == 1, ]
+
+cm <- lm(WEIG ~ HEIG, data = df_filter)
+
+predicciones <- predict(cm)
+residuos <- resid(cm)
+ecm <- mean(residuos^2)
+
+print(paste("El ECM del metodo de cuadrados minimos es de", ecm))
+
+plot(body$HEIG[body$GEN == 1], body$WEIG[body$GEN == 1], main= "Modelado sobre hombres",xlab = "Altura", ylab = "Peso")+
+  lines(regresion_h, col = "red")
+  abline(cm, col = "blue")
+  legend("topleft", legend = c("No parametrico", "Lineal"),  col = c("red", "blue"), lty= c(1,1))
+```
+
+```{r}
+#Diagrama de dispersion de HEIG vs. WEIG mujeres
+regresion_h <- ksmooth(body$HEIG[body$GEN == 0], body$WEIG[body$GEN == 0], kernel = "normal", bandwidth = 8)
+df_filter <- body[body$GEN == 0, ]
+
+cm <- lm(WEIG ~ HEIG, data = df_filter)
+
+predicciones <- predict(cm)
+residuos <- resid(cm)
+ecm <- mean(residuos^2)
+
+print(paste("El ECM del metodo de cuadrados minimos es de ", ecm))
+
+plot(body$HEIG[body$GEN == 0], body$WEIG[body$GEN == 0], main= "Modelado sobre mujeres", xlab = "Altura", ylab = "Peso")+
+  lines(regresion_h, col = "red")
+  abline(cm, col = "blue")
+  legend("topleft", legend = c("No parametrico", "Lineal"),  col = c("red", "blue"), lty= c(1,1))
+```
+
+Consideramos que la regresión lineal puede generalizar mejor a nuevos
+datos, es un modelo más simple y las curvas son similares. La regresión
+no paramétrica puede sobreajustar a los datos.
+
+Además, confirmamos nuestra hipótesis inicial de que la pendiente en el
+caso de los hombres es mayor que en el caso de las mujeres. Esta
+diferencia en las pendientes indica que la altura parece tener una
+influencia más significativa en el peso de los hombres en comparación
+con las mujeres. En consecuencia, podríamos concluir que, en nuestro
+conjunto de datos, la relación entre altura y peso es más alta en
+hombres que en mujeres.
+
+# Regresion Lineal
+
+## Ejercicio (g)
+
+Dividimos los datos en conjuntos de entrenamiento y testeo
+
+```{r}
+train_test = read.csv("TrainTest.txt", header=FALSE)$V1
+```
+
+```{r}
+train = body[train_test,]
+test = body[train_test == "FALSE",]
+```
+
+Ajustamos un modelo lineal para WEIG basado en todas las variables
+explicativas
+
+```{r}
+modelo <- lm(WEIG ~ ., data = train)
+```
+
+```{r}
+resumen <- summary(modelo)
+resumen
+```
+
+En el resumen se pueden ver los p-valores junto con símbolos que indican
+el nivel mínimo para el cual los valores son estadísticamente
+significativos. Dejaríamos las variables cuyo coeficiente es
+significativo a nivel 0,05.
+
+El valor del estádistico F da un p-valor de prácticamente 0. Por lo que
+tenemos mucha evidencia en contra de la hipótesis nula. Esto sugiere
+algún efecto de las variables explicativas (de al menos una) en **WEIG**
+y que el modelo lineal mejora al modelo constante.
+
+La estimación de los coeficientes puede estar siendo afectada por cierta
+correlación entre las variables independientes.
+
+Exploramos las correlaciones lineales entre las variables explicativas.
+
+```{r}
+matriz_correlacion <- cor(train)
+heatmap(matriz_correlacion)
+```
+
+Este código es para ver qué variables están más correlacionadas. El
+heatmap incluye a WEIG.
+
+```{r}
+matriz_correlacion <- cor(train)
+
+diag(matriz_correlacion) <- 0
+
+datos_largo <- as.data.frame(as.table(matriz_correlacion))
+datos_largo$Var1 <- rownames(matriz_correlacion)[datos_largo$Var1]
+datos_largo$Var2 <- rownames(matriz_correlacion)[datos_largo$Var2]
+
+datos_ordenados <- datos_largo %>% arrange(desc(abs(Freq)))
+
+datos_ordenados <- datos_ordenados %>% filter(Freq != 0)
+
+```
+
+La presencia de multicolinealidad puede hacer que algunos coeficientes
+sean menos significantes para el modelo. Por ejemplo, el coeficiente de
+una variable que quizás explica mejor a la variable dependiente, podria
+verse opacado por la correlación directa que tiene con otra variable
+independiente, provocando que la que realmente influye no tenga un
+coeficiente significativo. Podría ocurrir que para ciertas muestras el
+modelo tome a distintos coeficientes como significativos. Así, corremos
+el riesgo de descartar una variable importante basándonos únicamente en
+el p-valor.
+
+```{r}
+predicciones = predict(modelo, newdata = test)
+
+error_empirico = mean((test$WEIG - predicciones)^2)
+
+print(paste("Error de predicción empírico:", error_empirico))
+```
+
+## Ejercicio (h)
+
+En este ejercicio, analizaremos los p-valores de todas las variables y
+seleccionaremos aquellos más pequeños (menores a 0,05). Posteriormente,
+procederemos a eliminar algunas variables altamente correlacionadas con
+el objetivo de conservar únicamente aquellas que tienen un impacto
+significativo en el peso, que es la variable que buscamos predecir.
+
+```{r}
+p_values <- resumen$coefficients[, "Pr(>|t|)"]
+
+resultados <- data.frame(variable = rownames(resumen$coefficients), p_valor = p_values)
+resultados_ordenados <- resultados[order(resultados$p_valor), ]
+
+print(resultados_ordenados)
+```
+
+Nos quedaremos con las variables hasta **SHOUL**. Ahora, seleccionaremos
+las parejas de variables que están correlacionadas en más de un 70% , es
+decir, aquellas parejas en las cuales el coeficiente de correlación sea
+mayor a 0.7.
+
+```{r}
+imp_variables <- resultados_ordenados$variable[2:14]
+
+triplas <- data.frame(v1 = character(), v2 = character(), freq = numeric())
+
+for (v1 in imp_variables) {
+  for (v2 in imp_variables) {
+    if (v1 != v2) {
+      freq <- datos_ordenados$Freq[datos_ordenados$Var1 == v1 & datos_ordenados$Var2 == v2]
+      if (length(freq) > 0 && freq > 0.7) {
+        triplas <- rbind(triplas, data.frame(v1 = v1, v2 = v2, freq = freq))
+      }
+    }
+  }
+}
+
+triplas <- triplas[order(-triplas$freq), ]
+print(triplas)
+```
+
+Finalmente de estas parejas iremos quitando, de la sublista de variables
+que consideramos importantes, las menos importantes (las de mayor
+p-valor) hasta que no haya mas parejas correlacionados con un porcentaje
+mayor al 70%.
+
+```{r}
+variables_a_sacar <- c()
+i <- 13
+while(i > 1){
+  n_prev <- nrow(triplas)
+  triplas <- triplas[!(triplas$v1 == imp_variables[i] | triplas$v2 == imp_variables[i]),]
+  if(nrow(triplas) < n_prev){
+    variables_a_sacar <- c(variables_a_sacar, imp_variables[i])
+  }
+  i <- i-1
+}
+
+print(variables_a_sacar)
+```
+
+```{r}
+variables_finales <- setdiff(imp_variables, variables_a_sacar)
+variables_finales
+```
+
+Entonces para predecir "WEIG", nos quedaremos con las variables: \*
+'HEIG' \* 'WAISTG' \* 'HIP' \* 'CALF' \* 'AGE'
+
+Ajustamos el modelo correspondiente y analizamos los resultados
+obtenidos.
+
+```{r}
+modelo <- lm(WEIG ~ ., data = train[c("WEIG",variables_finales)])
+```
+
+```{r}
+resumen <- summary(modelo)
+resumen
+```
+
+Al reducir la cantidad de variables en nuestro modelo, observamos una
+disminución en el coeficiente $R^2$ , lo que indica que el modelo
+explica menos la variabilidad en la variable **WEIG**. Sin embargo, el
+coeficiente sigue siendo cercano a 1. A pesar de esta disminución, los
+coeficientes de las variables seleccionadas se vuelven más
+significativos, lo que sugiere que estas variables son más relevantes
+para explicar la variable de interés. Sin embargo, esta simplificación
+del modelo también se refleja en un aumento en la varianza residual, ya
+que hay menos variables para explicar la variabilidad no explicada por
+el modelo.
+
+## Ejercicio (i)
+
+```{r}
+modelo_reg = glmnet(x = as.matrix(train[, -23]), y = train$WEIG, alpha = 1)
+```
+
+```{r}
+modelo_reg$lambda
+```
+
+```{r}
+coef(modelo_reg)
+```
+
+```{r}
+modelo_reg
+```
+
+```{r}
+plot(modelo_reg, xvar="lambda")
+```
+
+Las líneas representan a cada coeficiente. A medida que el lambda
+aumenta, los coeficientes deben ser más chicos por la función a
+minimizar. El eje de arriba representa la columna Df, que es la cantidad
+de variables no nulas para el lambda correspondiente.
+
+## Ejercicio (j)
+
+Buscamos el lambda óptimo
+
+```{r}
+cvfit = cv.glmnet(x = as.matrix(train[, -23]), y = train$WEIG, alpha = 1)
+```
+
+```{r}
+cvfit
+```
+
+```{r}
+plot(cvfit)
+```
+
+La función nos devuelve el lambda óptimo y el lambda usando el criterio
+de 1 desvío estándar.
+
+```{r}
+lambda_opt = cvfit$lambda.min
+lambda_1_desvio = cvfit$lambda.1se
+```
+
+```{r}
+lambda_opt
+```
+
+```{r}
+lambda_1_desvio
+```
+
+```{r}
+modelo_reg_nuevo = glmnet(x = as.matrix(train[, -23]), y = train$WEIG, alpha = 1, lambda=lambda_1_desvio)
+```
+
+```{r}
+coef(modelo_reg_nuevo)
+```
+
+Los coeficientes que el modelo conserva, tienen en general la misma
+magnitud. El modelo regularizado fuerza a que muchos coeficientes se
+vuelvan nulos. En el caso del modelo sin regularizar, todos los
+coeficientes son no nulos.
+
+```{r}
+predicciones_reg = predict(modelo_reg_nuevo, newx = as.matrix(test[, -23]))
+
+error_empirico_reg = mean((test$WEIG - predicciones_reg)^2)
+
+print(paste("Error de predicción empírico:", error_empirico_reg))
+```
+
+El error de predicción empírico usando el lambda de 1 desvío es mayor.
+
+```{r}
+predicciones_reg = predict(modelo_reg, newx = as.matrix(test[, -23]), s=c(lambda_opt))
+
+error_empirico_reg = mean((test$WEIG - predicciones_reg)^2)
+
+print(paste("Error de predicción empírico:", error_empirico_reg))
+```
+
+Este es con el lambda óptimo
+
+## Ejercicio (k)
+
+En el ejercicio (h), aunque las variables se vuelven más significativas,
+el modelo se vuelve mucho más simple. Además la significación de los
+coeficientes de variables correlacionadas puede variar según los datos
+por lo que este criterio no es infalible y alguna variable que explique
+mejor la relación puede haber quedado afuera.
+
+En el ejercicio (j), el error de predicción empírico es más alto usando
+el lambda de 1 desvío. El modelo no regularizado predice mejor sobre el
+conjunto de testeo. En este caso, el criterio no parece generalizar
+mejor. Puede que si tuviéramos más datos esto mejorara. Por último
+pudimos ver que con el lambda óptimo sí bajó el error en el conjunto de
+testeo.
